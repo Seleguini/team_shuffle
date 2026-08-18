@@ -24,9 +24,11 @@
 <!-- React 18 + Babel, classic global-script build. Deliberately NOT using
      ES module <script type="module"> / import syntax here: module scripts
      are blocked by some browsers/hosts when opened from a local file or
-     certain static hosts, which is what caused the blank "Carregando..."
-     screen. This UMD + Babel-classic combo is the same pattern React's
-     own CDN quick-start uses and works everywhere. -->
+     certain static hosts. This UMD + Babel-classic combo is the same
+     pattern React's own CDN quick-start uses and works everywhere. No
+     crossorigin attribute either — that requires the CDN response to
+     carry CORS headers, and if a network/proxy strips them the script
+     silently fails to run. -->
 <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.24.7/babel.min.js"></script>
@@ -430,6 +432,7 @@ function BottomNav({ screen, setScreen }) {
   const items = [
     { id: "home", label: "Sorteio", icon: Shuffle },
     { id: "players", label: "Elenco", icon: Users },
+    { id: "match", label: "Jogo", icon: Trophy },
     { id: "history", label: "Histórico", icon: HistoryIcon },
   ];
   return (
@@ -1228,8 +1231,124 @@ function ResultScreen({ teams, setTeams, sportName, selectedPlayers, splitMode, 
 }
 
 /* ---------------------------------------------------------------
-   HISTORY SCREEN
+   MATCH SCREEN
+   Rotated into landscape via a CSS transform (works regardless of
+   the phone's physical orientation lock / device orientation API
+   support, which is inconsistent across browsers). Lay the phone
+   flat on the table between the teams like a real scoreboard.
 ---------------------------------------------------------------- */
+/* ---------------------------------------------------------------
+   MATCH SCREEN
+   A simple, standalone scoreboard for a match between two teams —
+   independent of the sorteio/draw feature. Rotated into landscape
+   via a CSS transform (works regardless of the phone's physical
+   orientation lock / device orientation API support, which is
+   inconsistent across browsers). Lay the phone flat on the table
+   between the two teams like a real scoreboard.
+---------------------------------------------------------------- */
+function MatchScreen({ scores, onScore, onReset, onExit }) {
+  const winnerIndex = scores.findIndex((s) => s >= 12);
+  const hasWinner = winnerIndex !== -1;
+  const teamColors = [C.lime, C.blue];
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: "100%",
+        left: 0,
+        width: "100vh",
+        height: "100vw",
+        transform: "rotate(-90deg)",
+        transformOrigin: "left top",
+        background: C.bg,
+        zIndex: 50,
+      }}
+      className="flex flex-col"
+    >
+      <div
+        style={{ borderBottom: `1px solid ${C.border}` }}
+        className="flex items-center justify-between px-4 py-2.5 shrink-0"
+      >
+        <button onClick={onExit} className="flex items-center gap-1.5 py-1 pr-2">
+          <ArrowLeft size={16} style={{ color: C.muted }} />
+          <span style={{ ...body, color: C.muted, fontWeight: 600 }} className="text-xs">
+            Sair
+          </span>
+        </button>
+        <span style={{ ...display, color: C.muted }} className="text-xs uppercase tracking-wide">
+          {hasWinner ? `Time ${winnerIndex + 1} venceu!` : "Placar · até 12"}
+        </span>
+        <button onClick={onReset} className="flex items-center gap-1.5 py-1 pl-2">
+          <RotateCcw size={14} style={{ color: C.muted }} />
+          <span style={{ ...body, color: C.muted, fontWeight: 600 }} className="text-xs">
+            Zerar
+          </span>
+        </button>
+      </div>
+
+      <div className="flex-1 flex items-stretch min-h-0">
+        {[0, 1].map((i) => {
+          const color = teamColors[i];
+          const score = scores[i] || 0;
+          const isWinner = hasWinner && i === winnerIndex;
+          return (
+            <div
+              key={i}
+              style={{
+                borderRight: i === 0 ? `1px solid ${C.border}` : "none",
+                background: isWinner ? `${color}14` : "transparent",
+              }}
+              className="flex-1 flex flex-col items-center justify-center gap-3 relative min-w-0 px-1"
+            >
+              {isWinner && (
+                <div
+                  style={{ ...display, color }}
+                  className="absolute top-3 flex items-center gap-1.5 text-xs uppercase tracking-wide font-semibold"
+                >
+                  <Trophy size={14} /> Vencedor
+                </div>
+              )}
+
+              <span style={{ ...display, color: C.muted }} className="uppercase tracking-wide text-sm">
+                Time {i + 1}
+              </span>
+
+              <button
+                onClick={() => onScore(i, 1)}
+                disabled={score >= 12}
+                style={{ color: score >= 12 ? C.mutedDark : color }}
+                className="p-2 active:scale-90 transition-transform"
+                aria-label={`Aumentar placar do Time ${i + 1}`}
+              >
+                <ChevronUp size={34} strokeWidth={2.6} />
+              </button>
+
+              <span
+                style={{ ...display, color: isWinner ? color : C.text, fontSize: 76, lineHeight: 1 }}
+                className="font-bold tabular-nums"
+              >
+                {score}
+              </span>
+
+              <button
+                onClick={() => onScore(i, -1)}
+                disabled={score <= 0}
+                style={{ color: score <= 0 ? C.mutedDark : C.muted }}
+                className="p-2 active:scale-90 transition-transform"
+                aria-label={`Diminuir placar do Time ${i + 1}`}
+              >
+                <ChevronDown size={34} strokeWidth={2.6} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
 function HistoryScreen({ history, setHistory }) {
   const [openId, setOpenId] = useState(null);
 
@@ -1305,7 +1424,7 @@ function App() {
   const [loaded, setLoaded] = useState(false);
   const [players, setPlayers] = useState([]);
   const [history, setHistory] = useState([]);
-  const [screen, setScreen] = useState("home"); // home | players | history | select | result
+  const [screen, setScreen] = useState("home"); // home | players | history | select | result | match
   const [setup, setSetup] = useState({
     sportId: "futsal",
     customSize: 5,
@@ -1317,6 +1436,7 @@ function App() {
   const [teams, setTeams] = useState([]);
   const [shuffling, setShuffling] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [matchScores, setMatchScores] = useState([0, 0]);
 
   // load fonts
   useEffect(() => {
@@ -1379,6 +1499,18 @@ function App() {
     setSaved(true);
   }
 
+  function updateScore(i, delta) {
+    setMatchScores((prev) => {
+      const next = [...prev];
+      next[i] = Math.max(0, Math.min(12, (next[i] || 0) + delta));
+      return next;
+    });
+  }
+
+  function resetMatch() {
+    setMatchScores([0, 0]);
+  }
+
   const chosenPlayers = players.filter((p) => selected.has(p.id));
 
   return (
@@ -1421,6 +1553,14 @@ function App() {
             onReshuffle={reshuffle}
             onSave={saveDraw}
             saved={saved}
+          />
+        )}
+        {screen === "match" && (
+          <MatchScreen
+            scores={matchScores}
+            onScore={updateScore}
+            onReset={resetMatch}
+            onExit={() => setScreen("home")}
           />
         )}
       </div>
